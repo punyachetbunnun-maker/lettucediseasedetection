@@ -2,22 +2,36 @@
 const button = document.getElementById("startCamera");
 const video = document.getElementById("video");
 
-button.addEventListener("click", async () => {
-  try {
-    button.textContent = "Opening camera...";
+let stream = null;
 
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: true,
+button.addEventListener("click", async () => {
+  // If the camera is already running, stop it.
+  if (stream) {
+    stream.getTracks().forEach(track => track.stop());
+    stream = null;
+    video.srcObject = null;
+    button.textContent = "Start Camera";
+    return;
+  }
+
+  // Start the back camera.
+  button.textContent = "Opening camera...";
+  button.disabled = true;
+
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: "environment" } },
       audio: false
     });
 
     video.srcObject = stream;
     await video.play();
 
-    button.textContent = "Camera Started";
+    button.textContent = "Stop Camera";
   } catch (error) {
+    alert("Could not open camera: " + error.message);
     button.textContent = "Start Camera";
-    alert("Camera error: " + error.message);
-    console.error(error);
+  } finally {
+    button.disabled = false;
   }
 });
