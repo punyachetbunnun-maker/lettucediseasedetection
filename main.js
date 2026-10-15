@@ -1,59 +1,129 @@
 
+
+"use strict";
+
 // ============================================
-// YOLO REAL-TIME VISION
-// Frontend: Camera + Frame Capture + AI API
+// LETTUCE AI VISION
+// Camera + Live Frames + YOLO API
 // ============================================
 
-const video = document.getElementById("video");
-const overlay = document.getElementById("overlay");
+const $ = (id) => document.getElementById(id);
+
+const video = $("video");
+const overlay = $("overlay");
 const ctx = overlay.getContext("2d");
 
-const startCameraBtn = document.getElementById("startCamera");
-const stopCameraBtn = document.getElementById("stopCamera");
-const startDetectionBtn = document.getElementById("startDetection");
-const stopDetectionBtn = document.getElementById("stopDetection");
+const startCameraBtn = $("startCamera");
+const stopCameraBtn = $("stopCamera");
+const startDetectionBtn = $("startDetection");
+const stopDetectionBtn = $("stopDetection");
 
-const cameraStatus = document.getElementById("cameraStatus");
-const aiStatus = document.getElementById("aiStatus");
-const detectionCount = document.getElementById("detectionCount");
-const results = document.getElementById("results");
-const apiUrl = document.getElementById("apiUrl");
+const cameraStatus = $("cameraStatus");
+const cameraBadge = $("cameraBadge");
+const cameraMetric = $("cameraMetric");
+const cameraMetricDot = $("cameraMetricDot");
 
-// Temporary canvas used to capture video frames
+const aiStatus = $("aiStatus");
+const aiMetricDot = $("aiMetricDot");
+const detectionCount = $("detectionCount");
+
+const results = $("results");
+const resultsEmpty = $("resultsEmpty");
+const apiUrl = $("apiUrl");
+
+const cameraPlaceholder = $("cameraPlaceholder");
+const videoLabel = $("videoLabel");
+const sessionBadge = $("sessionBadge");
+
+const themeToggle = $("themeToggle");
+const themeIcon = $("themeIcon");
+const themeText = $("themeText");
+
 const captureCanvas = document.createElement("canvas");
 const captureCtx = captureCanvas.getContext("2d");
 
-// Application state
 let stream = null;
 let detectionTimer = null;
 let sendingFrame = false;
 let running = false;
+let requestController = null;
 
-// Send a frame every 300 milliseconds.
-// Increase this value if your backend is slow.
-const FRAME_INTERVAL = 300;
+const FRAME_INTERVAL = 500;
 
 // ============================================
-// 1. START CAMERA
+// STATUS HELPERS
+// ============================================
+
+function setDot(element, state) {
+  if (!element) return;
+
+  element.classList.remove("online", "error");
+
+  if (state === "online") {
+    element.classList.add("online");
+  } else if (state === "error") {
+    element.classList.add("error");
+  }
+}
+
+function setCameraStatus(text, state = "offline") {
+  cameraStatus.textContent = text;
+  cameraMetric.textContent = text;
+  cameraBadge.innerHTML = "";
+
+  const dot = document.createElement("span");
+  dot.className = "indicator-dot";
+
+  if (state === "online") dot.classList.add("online");
+  if (state === "error") dot.classList.add("error");
+
+  cameraBadge.append(dot, document.createTextNode(" " + (
+    state === "online" ? "Online" :
+    state === "error" ? "Error" : "Offline"
+  )));
+
+  setDot(cameraMetricDot, state);
+}
+
+function setAIStatus(text, state = "offline") {
+  aiStatus.textContent = text;
+  setDot(aiMetricDot, state);
+}
+
+function setSessionStatus(text, state = "offline") {
+  sessionBadge.replaceChildren();
+
+  const dot = document.createElement("span");
+  dot.className = "indicator-dot";
+
+  if (state === "online") dot.classList.add("online");
+  if (state === "error") dot.classList.add("error");
+
+  sessionBadge.append(dot, document.createTextNode(" " + text));
+}
+
+// ============================================
+// 1. CAMERA
 // ============================================
 
 startCameraBtn.addEventListener("click", startCamera);
+stopCameraBtn.addEventListener("click", stopCamera);
 
 async function startCamera() {
   if (stream) return;
 
-  cameraStatus.textContent = "Requesting camera...";
   startCameraBtn.disabled = true;
+  setCameraStatus("Requesting permission...");
+  setSessionStatus("Starting camera");
 
   try {
     if (!navigator.mediaDevices?.getUserMedia) {
       throw new Error(
-        "Camera API unavailable. Open the website over HTTPS."
+        "Camera access is unavailable. Open this site using HTTPS."
       );
     }
 
-    // Request camera access
-    stream = await navigator.mediaDevices.getUserMedia({
+    const newStream = await navigator.mediaDevices.getUserMedia({
       video: {
         facingMode: { ideal: "environment" },
         width: { ideal: 640 },
@@ -62,38 +132,56 @@ async function startCamera() {
       audio: false
     });
 
-    // Display the live camera
+    // The user might have stopped the camera while permission was pending.
+    if (startCameraBtn.disabled === false) {
+      newStream.getTracks().forEach(track => track.stop());
+      return;
+    }
+
+    stream = newStream;
     video.srcObject = stream;
+
     await video.play();
 
-    cameraStatus.textContent = "Online";
+    cameraPlaceholder.classList.add("hidden");
+    videoLabel.classList.add("recording");
+    videoLabel.textContent = "LIVE CAMERA";
+
+    setCameraStatus("Online", "online");
+    setSessionStatus("Camera active", "online");
+
     stopCameraBtn.disabled = false;
     startDetectionBtn.disabled = false;
 
-    console.log("Camera started successfully.");
+    console.log("Camera started.");
 
   } catch (error) {
     console.error("Camera error:", error);
 
-    cameraStatus.textContent =
-      `${error.name || "Error"}: ${error.message}`;
+    if (stream) {
+      stream.getTracks().forEach(track => track.stop());
+      stream = null;
+    }
+
+    video.srcObject = null;
+    cameraPlaceholder.classList.remove("hidden");
+    videoLabel.classList.remove("recording");
+    videoLabel.textContent = "LIVE PREVIEW";
+
+    setCameraStatus(error.message || "Camera error", "error");
+    setSessionStatus("Camera error", "error");
 
     startCameraBtn.disabled = false;
-    stream = null;
+    stopCameraBtn.disabled = true;
+    startDetectionBtn.disabled = true;
 
     alert(
-      "Could not start the camera.\n\n" +
-      error.name + ": " + error.message +
-      "\n\nCheck camera permission and use HTTPS."
+      "Unable to start the camera.\n\n" +
+      (error.name || "Error") + ": " + error.message +
+      "\n\nCheck your browser's camera permission."
     );
   }
 }
-
-// ============================================
-// 2. STOP CAMERA
-// ============================================
-
-stopCameraBtn.addEventListener("click", stopCamera);
 
 function stopCamera() {
   stopDetection();
@@ -105,8 +193,13 @@ function stopCamera() {
 
   video.srcObject = null;
 
-  cameraStatus.textContent = "Offline";
-  aiStatus.textContent = "Disconnected";
+  cameraPlaceholder.classList.remove("hidden");
+  videoLabel.classList.remove("recording");
+  videoLabel.textContent = "LIVE PREVIEW";
+
+  setCameraStatus("Offline");
+  setAIStatus("Disconnected");
+  setSessionStatus("Standby");
 
   startCameraBtn.disabled = false;
   stopCameraBtn.disabled = true;
@@ -119,10 +212,11 @@ function stopCamera() {
 }
 
 // ============================================
-// 3. START AI DETECTION
+// 2. START AND STOP DETECTION
 // ============================================
 
 startDetectionBtn.addEventListener("click", startDetection);
+stopDetectionBtn.addEventListener("click", stopDetection);
 
 function startDetection() {
   if (!stream || running) return;
@@ -134,29 +228,30 @@ function startDetection() {
     return;
   }
 
+  try {
+    new URL(endpoint);
+  } catch {
+    alert("Please enter a valid backend URL.");
+    return;
+  }
+
   running = true;
 
-  aiStatus.textContent = "Connecting...";
   startDetectionBtn.disabled = true;
   stopDetectionBtn.disabled = false;
 
-  // Send frames continuously without overlapping requests
-  detectionTimer = setInterval(
-    sendFrame,
-    FRAME_INTERVAL
-  );
+  setAIStatus("Connecting...");
+  setSessionStatus("Detection running", "online");
 
-  // Send the first frame immediately
+  // Start immediately, then process another frame when ready.
   sendFrame();
 
-  console.log("AI detection started.");
+  detectionTimer = setInterval(() => {
+    if (!sendingFrame) sendFrame();
+  }, FRAME_INTERVAL);
+
+  console.log("Detection started.");
 }
-
-// ============================================
-// 4. STOP AI DETECTION
-// ============================================
-
-stopDetectionBtn.addEventListener("click", stopDetection);
 
 function stopDetection() {
   running = false;
@@ -166,18 +261,27 @@ function stopDetection() {
     detectionTimer = null;
   }
 
-  aiStatus.textContent = "Disconnected";
+  if (requestController) {
+    requestController.abort();
+    requestController = null;
+  }
 
-  startDetectionBtn.disabled = !stream;
+  setAIStatus("Disconnected");
+
   stopDetectionBtn.disabled = true;
+  startDetectionBtn.disabled = !stream;
+
+  if (stream) {
+    setSessionStatus("Camera active", "online");
+  } else {
+    setSessionStatus("Standby");
+  }
 
   clearOverlay();
-
-  console.log("AI detection stopped.");
 }
 
 // ============================================
-// 5. CAPTURE AND SEND VIDEO FRAMES
+// 3. CAPTURE AND SEND A FRAME
 // ============================================
 
 async function sendFrame() {
@@ -191,111 +295,104 @@ async function sendFrame() {
   }
 
   sendingFrame = true;
+  const controller = new AbortController();
+  requestController = controller;
 
   try {
     const width = video.videoWidth;
     const height = video.videoHeight;
 
     if (!width || !height) {
-      throw new Error("Waiting for camera video...");
+      throw new Error("Waiting for video frames.");
     }
 
-    // Capture the current video frame
     captureCanvas.width = width;
     captureCanvas.height = height;
 
-    captureCtx.drawImage(
-      video,
-      0,
-      0,
-      width,
-      height
-    );
+    captureCtx.drawImage(video, 0, 0, width, height);
 
-    // Convert the frame to JPEG
     const blob = await new Promise(resolve => {
-      captureCanvas.toBlob(
-        resolve,
-        "image/jpeg",
-        0.8
-      );
+      captureCanvas.toBlob(resolve, "image/jpeg", 0.8);
     });
 
     if (!blob) {
-      throw new Error("Could not capture video frame.");
+      throw new Error("Could not capture the camera frame.");
     }
 
-    // Package the image for the Python backend
     const formData = new FormData();
+    formData.append("file", blob, "frame.jpg");
 
-    formData.append(
-      "file",
-      blob,
-      "frame.jpg"
-    );
-
-    // Send the image to YOLO's API
     const response = await fetch(apiUrl.value.trim(), {
       method: "POST",
-      body: formData
+      body: formData,
+      signal: controller.signal
     });
 
     if (!response.ok) {
-      throw new Error(
-        `Backend HTTP error: ${response.status}`
-      );
+      throw new Error(`Backend returned HTTP ${response.status}.`);
     }
 
     const data = await response.json();
 
     if (!running) return;
 
-    aiStatus.textContent = "Connected";
+    setAIStatus("Connected", "online");
+    setSessionStatus("Detection running", "online");
 
     renderDetections(
-      Array.isArray(data.detections)
-        ? data.detections
-        : [],
+      Array.isArray(data.detections) ? data.detections : [],
       width,
       height
     );
 
   } catch (error) {
-    console.error("Detection request failed:", error);
+    if (error.name === "AbortError") return;
+
+    console.error("AI request failed:", error);
 
     if (running) {
-      aiStatus.textContent = "Connection error";
+      setAIStatus("Connection error", "error");
+      setSessionStatus("Backend unavailable", "error");
     }
 
   } finally {
+    if (requestController === controller) {
+      requestController = null;
+    }
+
     sendingFrame = false;
   }
 }
 
 // ============================================
-// 6. DISPLAY DETECTION RESULTS
+// 4. RENDER DETECTIONS
+// Expected API response:
+// {
+//   "detections": [
+//     {
+//       "label": "leaf_disease",
+//       "confidence": 0.94,
+//       "x1": 100, "y1": 80,
+//       "x2": 260, "y2": 220
+//     }
+//   ]
+// }
 // ============================================
 
-function renderDetections(
-  detections,
-  sourceWidth,
-  sourceHeight
-) {
-  overlay.width = sourceWidth;
-  overlay.height = sourceHeight;
+function renderDetections(detections, width, height) {
+  overlay.width = width;
+  overlay.height = height;
 
-  ctx.clearRect(
-    0,
-    0,
-    overlay.width,
-    overlay.height
-  );
+  ctx.clearRect(0, 0, width, height);
 
-  detectionCount.textContent = detections.length;
+  detectionCount.textContent = String(detections.length);
+
   results.replaceChildren();
+  resultsEmpty.classList.toggle("hidden", detections.length > 0);
 
   if (detections.length === 0) {
     const li = document.createElement("li");
+    li.className = "result-placeholder";
     li.textContent = "No objects detected.";
     results.appendChild(li);
     return;
@@ -315,95 +412,91 @@ function renderDetections(
       continue;
     }
 
-    const label = String(
-      detection.label ?? "Object"
-    );
+    const label = String(detection.label ?? "Object");
+    const confidence = Number(detection.confidence ?? 0);
+    const percent = Number.isFinite(confidence)
+      ? (confidence * 100).toFixed(1)
+      : "0.0";
 
-    const confidence = Number(
-      detection.confidence ?? 0
-    );
+    // Draw bounding box.
+    ctx.strokeStyle = "#82c83e";
+    ctx.lineWidth = Math.max(2, width / 320);
+    ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
 
-    // Draw bounding box
-    ctx.strokeStyle = "#22e58b";
-    ctx.lineWidth = 3;
+    // Draw a label background and text.
+    const text = `${label} ${percent}%`;
+    const fontSize = Math.max(14, width / 40);
 
-    ctx.strokeRect(
-      x1,
-      y1,
-      x2 - x1,
-      y2 - y1
-    );
+    ctx.font = `600 ${fontSize}px Arial`;
 
-    // Draw label background
-    const text =
-      `${label} ${(confidence * 100).toFixed(1)}%`;
+    const padding = 7;
+    const labelHeight = fontSize + padding * 2;
+    const labelWidth = ctx.measureText(text).width + padding * 2;
+    const labelY = Math.max(0, y1 - labelHeight);
 
-    ctx.font = "16px Arial";
+    ctx.fillStyle = "#82c83e";
+    ctx.fillRect(x1, labelY, labelWidth, labelHeight);
 
-    const textWidth =
-      ctx.measureText(text).width + 12;
+    ctx.fillStyle = "#172411";
+    ctx.fillText(text, x1 + padding, labelY + fontSize + 1);
 
-    const labelY = Math.max(0, y1 - 25);
-
-    ctx.fillStyle = "#22e58b";
-
-    ctx.fillRect(
-      x1,
-      labelY,
-      textWidth,
-      25
-    );
-
-    // Draw label text
-    ctx.fillStyle = "#07130d";
-
-    ctx.fillText(
-      text,
-      x1 + 6,
-      labelY + 17
-    );
-
-    // Add result to the side panel
+    // Use textContent to keep labels safe.
     const li = document.createElement("li");
-
-    li.textContent =
-      `${label} — ${(confidence * 100).toFixed(1)}%`;
-
+    li.textContent = `${label} — ${percent}% confidence`;
     results.appendChild(li);
   }
+
+  resultsEmpty.classList.toggle(
+    "hidden",
+    results.children.length > 0
+  );
 }
 
 // ============================================
-// 7. CLEAR THE DETECTION OVERLAY
+// 5. RESET OVERLAY
 // ============================================
 
 function clearOverlay() {
-  ctx.clearRect(
-    0,
-    0,
-    overlay.width,
-    overlay.height
-  );
-
+  ctx.clearRect(0, 0, overlay.width, overlay.height);
   detectionCount.textContent = "0";
 
   results.replaceChildren();
 
   const li = document.createElement("li");
+  li.className = "result-placeholder";
   li.textContent = "Waiting for detections...";
-
   results.appendChild(li);
+
+  resultsEmpty.classList.remove("hidden");
 }
 
 // ============================================
-// 8. INITIALIZE BUTTONS
+// 6. DARK MODE
 // ============================================
 
+themeToggle.addEventListener("click", () => {
+  const isDark = document.body.classList.toggle("dark");
+
+  themeIcon.textContent = isDark ? "☀" : "☾";
+  themeText.textContent = isDark ? "Light mode" : "Dark mode";
+
+  document.querySelector('meta[name="theme-color"]')
+    ?.setAttribute("content", isDark ? "#111720" : "#f6f8fa");
+});
+
+// ============================================
+// 7. INITIAL STATE
+// ============================================
+
+startCameraBtn.disabled = false;
 stopCameraBtn.disabled = true;
 startDetectionBtn.disabled = true;
 stopDetectionBtn.disabled = true;
 
-cameraStatus.textContent = "Offline";
-aiStatus.textContent = "Disconnected";
+setCameraStatus("Offline");
+setAIStatus("Disconnected");
+setSessionStatus("Standby");
 
-console.log("YOLO Real-Time Vision initialized.");
+clearOverlay();
+
+console.log("Lettuce AI Vision initialized.");
