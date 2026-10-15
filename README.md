@@ -1,1 +1,4 @@
 # lettucediseasedetection globgolabgolabgal
+โครงงาน
+bruehuh
+😭
