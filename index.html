@@ -1,56 +1,209 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>YOLO Real-Time Vision</title>
-  <link rel="stylesheet" href="style.css">
+  <meta name="theme-color" content="#f6f8fa">
+  <meta name="description" content="Real-time lettuce disease detection using computer vision and YOLO.">
+  <title>Lettuce AI Vision | Disease Detection</title>
+  <link rel="stylesheet" href="./style.css?v=3">
+  <script src="./main.js?v=3" defer></script>
 </head>
+
 <body>
-  <header>
-    <h1>YOLO Real-Time Vision</h1>
-    <p>Live camera monitoring and AI detection</p>
+  <header class="topbar">
+    <a class="brand" href="./">
+      <span class="brand-icon">✳</span>
+      <span>Lettuce<span class="brand-light">AI</span></span>
+    </a>
+
+    <div class="header-right">
+      <span class="system-indicator">
+        <span class="indicator-dot"></span>
+        Vision System
+      </span>
+      <button id="themeToggle" class="theme-button" type="button">
+        <span id="themeIcon">☾</span>
+        <span id="themeText">Dark mode</span>
+      </button>
+    </div>
   </header>
 
-  <main>
-    <section class="viewer">
-      <div class="video-container">
-        <video id="video" autoplay playsinline muted></video>
-        <canvas id="overlay"></canvas>
-      </div>
-
-      <div class="controls">
-        <button id="startCamera">Start Camera</button>
-        <button id="stopCamera" disabled>Stop Camera</button>
-        <button id="startDetection" disabled>Start Detection</button>
-        <button id="stopDetection" disabled>Stop Detection</button>
-      </div>
+  <main class="page">
+    <section class="hero">
+      <span class="eyebrow">SMART AGRICULTURE · COMPUTER VISION</span>
+      <h1>Lettuce Disease <span>Detection</span></h1>
+      <p class="hero-description">
+        Monitor your lettuce plants in real time and prepare
+        for AI-powered disease detection.
+      </p>
     </section>
 
-    <aside class="panel">
-      <h2>System Status</h2>
-      <p>Camera: <span id="cameraStatus">Offline</span></p>
-      <p>AI connection: <span id="aiStatus">Disconnected</span></p>
-      <p>Detections: <span id="detectionCount">0</span></p>
+    <section class="toolbar card">
+      <div class="toolbar-copy">
+        <span class="section-icon">⌘</span>
+        <div>
+          <h2>Monitoring dashboard</h2>
+          <p>Manage your camera and detection session.</p>
+        </div>
+      </div>
 
-      <h3>Detection Results</h3>
-      <ul id="results">
-        <li>Waiting for detections...</li>
-      </ul>
+      <span id="sessionBadge" class="status-badge">
+        <span class="indicator-dot"></span>
+        Standby
+      </span>
+    </section>
 
-      <label for="apiUrl">YOLO API URL</label>
-      <input
-        id="apiUrl"
-        type="url"
-        value="http://localhost:8000/predict"
-        placeholder="https://your-server/predict"
-      >
-      <p class="hint">
-        The backend must implement a POST /predict endpoint.
-      </p>
-    </aside>
+    <section class="dashboard">
+      <article class="card camera-card">
+        <div class="card-heading">
+          <div>
+            <span class="eyebrow">CAMERA FEED</span>
+            <h2>Live camera</h2>
+          </div>
+
+          <span id="cameraBadge" class="status-badge">
+            <span class="indicator-dot"></span>
+            Offline
+          </span>
+        </div>
+
+        <div class="video-container" id="videoContainer">
+          <video id="video" autoplay playsinline muted></video>
+          <canvas id="overlay"></canvas>
+
+          <div id="cameraPlaceholder" class="camera-placeholder">
+            <div class="camera-placeholder-icon">⌁</div>
+            <h3>Your camera feed will appear here</h3>
+            <p>Start your camera to begin live monitoring.</p>
+          </div>
+
+          <div class="video-label">
+            <span class="record-dot"></span>
+            <span id="videoLabel">LIVE PREVIEW</span>
+          </div>
+        </div>
+
+        <div class="camera-status-line">
+          <span class="status-label">Camera status</span>
+          <span id="cameraStatus">Offline</span>
+        </div>
+
+        <div class="controls">
+          <button id="startCamera" class="button button-primary" type="button">
+            <span>▶</span> Start Camera
+          </button>
+          <button id="stopCamera" class="button button-secondary" type="button" disabled>
+            Stop Camera
+          </button>
+        </div>
+
+        <div class="detection-controls">
+          <button id="startDetection" class="button button-detection" type="button" disabled>
+            <span>✳</span> Start Detection
+          </button>
+          <button id="stopDetection" class="button button-secondary" type="button" disabled>
+            Stop Detection
+          </button>
+        </div>
+
+        <p class="helper-text">
+          Camera access requires permission. AI detection requires a running backend.
+        </p>
+      </article>
+
+      <aside class="side-column">
+        <article class="card status-card">
+          <div class="card-heading">
+            <div>
+              <span class="eyebrow">SYSTEM OVERVIEW</span>
+              <h2>System status</h2>
+            </div>
+            <span class="status-symbol">⌁</span>
+          </div>
+
+          <div class="metric">
+            <div class="metric-icon green-icon">⌁</div>
+            <div class="metric-copy">
+              <span>Camera</span>
+              <strong id="cameraMetric">Offline</strong>
+            </div>
+            <span id="cameraMetricDot" class="indicator-dot"></span>
+          </div>
+
+          <div class="metric">
+            <div class="metric-icon purple-icon">✳</div>
+            <div class="metric-copy">
+              <span>AI connection</span>
+              <strong id="aiStatus">Disconnected</strong>
+            </div>
+            <span id="aiMetricDot" class="indicator-dot"></span>
+          </div>
+
+          <div class="metric">
+            <div class="metric-icon green-icon">▦</div>
+            <div class="metric-copy">
+              <span>Detected objects</span>
+              <strong id="detectionCount">0</strong>
+            </div>
+          </div>
+        </article>
+
+        <article class="card results-card">
+          <div class="card-heading">
+            <div>
+              <span class="eyebrow">AI ANALYSIS</span>
+              <h2>Detection results</h2>
+            </div>
+            <span class="results-icon">⌕</span>
+          </div>
+
+          <div id="resultsEmpty" class="empty-results">
+            <div class="empty-icon">⌕</div>
+            <strong>No detections yet</strong>
+            <p>Detection results will appear here when the AI backend responds.</p>
+          </div>
+
+          <ul id="results" class="results-list">
+            <li class="result-placeholder">Waiting for detections...</li>
+          </ul>
+        </article>
+
+        <article class="card settings-card">
+          <div class="card-heading">
+            <div>
+              <span class="eyebrow">CONNECTION</span>
+              <h2>AI settings</h2>
+            </div>
+            <span class="settings-icon">⚙</span>
+          </div>
+
+          <label for="apiUrl">YOLO backend URL</label>
+          <input
+            id="apiUrl"
+            type="url"
+            value="http://localhost:8000/predict"
+            placeholder="https://your-server/predict"
+            autocomplete="url"
+          >
+
+          <p class="helper-text">
+            Enter the address of your Python API. GitHub Pages cannot run the AI backend itself.
+          </p>
+
+          <div class="connection-note">
+            <span class="note-icon">i</span>
+            <p>Frames are sent only when you start detection.</p>
+          </div>
+        </article>
+      </aside>
+    </section>
+
+    <footer class="footer">
+      <span><span class="footer-leaf">✳</span> Lettuce AI Vision</span>
+      <span>Real-time monitoring · Smart agriculture</span>
+    </footer>
   </main>
-
-  <script src="./main.js?v=2"></script>
 </body>
 </html>
