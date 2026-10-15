@@ -5,7 +5,6 @@ const video = document.getElementById("video");
 let stream = null;
 
 button.addEventListener("click", async () => {
-  // If the camera is already running, stop it.
   if (stream) {
     stream.getTracks().forEach(track => track.stop());
     stream = null;
@@ -14,7 +13,6 @@ button.addEventListener("click", async () => {
     return;
   }
 
-  // Start the back camera.
   button.textContent = "Opening camera...";
   button.disabled = true;
 
