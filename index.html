@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>YOLO Real-Time Vision</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>YOLO Real-Time Vision</h1>
+    <p>Live camera monitoring and AI detection</p>
+  </header>
+
+  <main>
+    <section class="viewer">
+      <div class="video-container">
+        <video id="video" autoplay playsinline muted></video>
+        <canvas id="overlay"></canvas>
+      </div>
+
+      <div class="controls">
+        <button id="startCamera">Start Camera</button>
+        <button id="stopCamera" disabled>Stop Camera</button>
+        <button id="startDetection" disabled>Start Detection</button>
+        <button id="stopDetection" disabled>Stop Detection</button>
+      </div>
+    </section>
+
+    <aside class="panel">
+      <h2>System Status</h2>
+      <p>Camera: <span id="cameraStatus">Offline</span></p>
+      <p>AI connection: <span id="aiStatus">Disconnected</span></p>
+      <p>Detections: <span id="detectionCount">0</span></p>
+
+      <h3>Detection Results</h3>
+      <ul id="results">
+        <li>Waiting for detections...</li>
+      </ul>
+
+      <label for="apiUrl">YOLO API URL</label>
+      <input
+        id="apiUrl"
+        type="url"
+        value="http://localhost:8000/predict"
+        placeholder="https://your-server/predict"
+      >
+      <p class="hint">
+        The backend must implement a POST /predict endpoint.
+      </p>
+    </aside>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
