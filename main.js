@@ -1,4 +1,4 @@
-```javascript
+
 // ============================================
 // YOLO REAL-TIME VISION
 // Frontend: Camera + Frame Capture + AI API
@@ -407,4 +407,3 @@ cameraStatus.textContent = "Offline";
 aiStatus.textContent = "Disconnected";
 
 console.log("YOLO Real-Time Vision initialized.");
-```
