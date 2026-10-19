@@ -1,5 +1,3 @@
-
-
 const button = document.getElementById("startCamera");
 const video = document.getElementById("video");
 
