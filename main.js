@@ -10,6 +10,14 @@ const locationStatus = document.getElementById("locationStatus");
 let stream = null;
 let locationWatch = null;
 let gradioClientPromise = null;
+let detectionActive = false;
+let detectionLoopRunning = false;
+
+const FRAME_DELAY_MS = 500; // Wait after each completed prediction
+
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
 
 function getAIClient() {
     if (!gradioClientPromise) {
@@ -32,16 +40,23 @@ function startLocation() {
 
     locationWatch = navigator.geolocation.watchPosition(
         position => {
-            latitude.textContent = position.coords.latitude.toFixed(6);
-            longitude.textContent = position.coords.longitude.toFixed(6);
+            latitude.textContent =
+                position.coords.latitude.toFixed(6);
+            longitude.textContent =
+                position.coords.longitude.toFixed(6);
             locationStatus.textContent =
                 "Location tracking active (accuracy: " +
                 Math.round(position.coords.accuracy) + " m)";
         },
         error => {
-            locationStatus.textContent = "Location error: " + error.message;
+            locationStatus.textContent =
+                "Location error: " + error.message;
         },
-        { enableHighAccuracy: true, maximumAge: 1000, timeout: 15000 }
+        {
+            enableHighAccuracy: true,
+            maximumAge: 1000,
+            timeout: 15000
+        }
     );
 }
 
@@ -53,16 +68,139 @@ function stopLocation() {
     locationStatus.textContent = "Location tracking stopped.";
 }
 
+function captureVideoFrame() {
+    if (!video.videoWidth || !video.videoHeight) {
+        throw new Error("Waiting for the camera video...");
+    }
+
+    const canvas = document.createElement("canvas");
+
+    // Limit image size to reduce upload time.
+    const scale = Math.min(1, 640 / video.videoWidth);
+    canvas.width = Math.round(video.videoWidth * scale);
+    canvas.height = Math.round(video.videoHeight * scale);
+
+    canvas.getContext("2d").drawImage(
+        video, 0, 0, canvas.width, canvas.height
+    );
+
+    return new Promise((resolve, reject) => {
+        canvas.toBlob(blob => {
+            if (!blob) {
+                reject(new Error("Could not capture video frame."));
+                return;
+            }
+
+            resolve(new File([blob], "frame.jpg", {
+                type: "image/jpeg"
+            }));
+        }, "image/jpeg", 0.8);
+    });
+}
+
+async function detectLoop() {
+    if (detectionLoopRunning) return;
+
+    detectionLoopRunning = true;
+
+    try {
+        const client = await getAIClient();
+
+        while (detectionActive && stream) {
+            try {
+                // Capture a new frame from the current live video.
+                const frame = await captureVideoFrame();
+
+                resultBox.textContent =
+                    "Analyzing live video...";
+
+                // Only one inference runs at a time.
+                const response = await client.predict(
+                    "/predict",
+                    [frame]
+                );
+
+                if (!detectionActive || !stream) break;
+
+                const prediction = response.data?.[0];
+
+                resultBox.textContent =
+                    typeof prediction === "string"
+                        ? prediction
+                        : JSON.stringify(
+                            prediction ?? response.data,
+                            null,
+                            2
+                        );
+
+            } catch (error) {
+                console.error("Frame detection failed:", error);
+
+                if (!detectionActive || !stream) break;
+
+                resultBox.textContent =
+                    "Detection error: " +
+                    (error.message || String(error));
+
+                // Avoid repeatedly hammering the backend on errors.
+                await sleep(2000);
+            }
+
+            // Wait after each prediction, then capture a NEW frame.
+            if (detectionActive && stream) {
+                await sleep(FRAME_DELAY_MS);
+            }
+        }
+    } catch (error) {
+        console.error("Could not connect to AI:", error);
+
+        if (detectionActive) {
+            resultBox.textContent =
+                "AI connection failed: " +
+                (error.message || String(error));
+        }
+    } finally {
+        detectionLoopRunning = false;
+
+        // Resume if detection was restarted while a previous
+        // request was still finishing.
+        if (detectionActive && stream) {
+            void detectLoop();
+        }
+    }
+}
+
+function startDetection() {
+    if (!stream || detectionActive) return;
+
+    detectionActive = true;
+    detectButton.textContent = "Pause Live Detection";
+    resultBox.textContent = "Connecting to AI...";
+
+    void detectLoop();
+}
+
+function stopDetection() {
+    detectionActive = false;
+    detectButton.textContent = "Resume Live Detection";
+    resultBox.textContent = "Live detection paused.";
+}
+
 button.addEventListener("click", async () => {
     if (stream) {
+        detectionActive = false;
+
         stream.getTracks().forEach(track => track.stop());
         stream = null;
         video.srcObject = null;
+
         stopLocation();
 
         button.textContent = "Start Camera";
+        detectButton.textContent = "Live Detection";
         detectButton.disabled = true;
         resultBox.textContent = "Camera stopped.";
+
         return;
     }
 
@@ -71,7 +209,9 @@ button.addEventListener("click", async () => {
 
     try {
         stream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: { ideal: "environment" } },
+            video: {
+                facingMode: { ideal: "environment" }
+            },
             audio: false
         });
 
@@ -80,67 +220,39 @@ button.addEventListener("click", async () => {
 
         button.textContent = "Stop Camera";
         detectButton.disabled = false;
-        resultBox.textContent = "Camera ready. Tap Detect Disease.";
+
         startLocation();
+
+        // Start AI analysis automatically with the live video.
+        startDetection();
+
     } catch (error) {
+        if (stream) {
+            stream.getTracks().forEach(track => track.stop());
+        }
+
         stream = null;
         video.srcObject = null;
         button.textContent = "Start Camera";
         detectButton.disabled = true;
-        resultBox.textContent = "Camera error: " + error.message;
+
+        resultBox.textContent =
+            "Camera error: " + error.message;
     } finally {
         button.disabled = false;
     }
 });
 
-detectButton.addEventListener("click", async () => {
-    resultBox.textContent = "Detect button clicked.";
-
-    if (!stream || !video.videoWidth) {
+detectButton.addEventListener("click", () => {
+    if (!stream) {
         resultBox.textContent = "Please start the camera first.";
         return;
     }
 
-    detectButton.disabled = true;
-    detectButton.textContent = "Analyzing...";
-
-    try {
-        const canvas = document.createElement("canvas");
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        canvas.getContext("2d").drawImage(video, 0, 0);
-
-        const blob = await new Promise((resolve, reject) => {
-            canvas.toBlob(
-                file => file ? resolve(file) : reject(
-                    new Error("Could not capture camera image.")
-                ),
-                "image/jpeg",
-                0.9
-            );
-        });
-
-        const imageFile = new File([blob], "lettuce.jpg", {
-            type: "image/jpeg"
-        });
-
-        resultBox.textContent = "Connecting to AI...";
-
-        const client = await getAIClient();
-        const response = await client.predict("/predict", [imageFile]);
-
-        const prediction = response.data?.[0];
-        resultBox.textContent = typeof prediction === "string"
-            ? prediction
-            : JSON.stringify(prediction ?? response.data, null, 2);
-
-    } catch (error) {
-        console.error(error);
-        resultBox.textContent =
-            "Detection failed: " + (error.message || String(error));
-    } finally {
-        detectButton.disabled = !stream;
-        detectButton.textContent = "Detect Disease";
+    if (detectionActive) {
+        stopDetection();
+    } else {
+        startDetection();
     }
 });
 
