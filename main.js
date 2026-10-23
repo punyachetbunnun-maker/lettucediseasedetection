@@ -11,8 +11,6 @@ let stream = null;
 let locationWatch = null;
 let gradioClientPromise = null;
 
-// Connect to the public Hugging Face Space.
-// The model repository can remain private.
 function getAIClient() {
     if (!gradioClientPromise) {
         gradioClientPromise = import(
@@ -21,40 +19,29 @@ function getAIClient() {
             Client.connect("punyachetbunnun/lettuce-disease-api")
         );
     }
-
     return gradioClientPromise;
 }
 
 function startLocation() {
     if (!navigator.geolocation) {
-        locationStatus.textContent =
-            "Location is not supported by this browser.";
+        locationStatus.textContent = "Location is not supported.";
         return;
     }
 
     locationStatus.textContent = "Requesting location permission...";
 
     locationWatch = navigator.geolocation.watchPosition(
-        (position) => {
-            latitude.textContent =
-                position.coords.latitude.toFixed(6);
-
-            longitude.textContent =
-                position.coords.longitude.toFixed(6);
-
+        position => {
+            latitude.textContent = position.coords.latitude.toFixed(6);
+            longitude.textContent = position.coords.longitude.toFixed(6);
             locationStatus.textContent =
                 "Location tracking active (accuracy: " +
                 Math.round(position.coords.accuracy) + " m)";
         },
-        (error) => {
-            locationStatus.textContent =
-                "Location error: " + error.message;
+        error => {
+            locationStatus.textContent = "Location error: " + error.message;
         },
-        {
-            enableHighAccuracy: true,
-            maximumAge: 1000,
-            timeout: 15000
-        }
+        { enableHighAccuracy: true, maximumAge: 1000, timeout: 15000 }
     );
 }
 
@@ -63,7 +50,6 @@ function stopLocation() {
         navigator.geolocation.clearWatch(locationWatch);
         locationWatch = null;
     }
-
     locationStatus.textContent = "Location tracking stopped.";
 }
 
@@ -72,24 +58,20 @@ button.addEventListener("click", async () => {
         stream.getTracks().forEach(track => track.stop());
         stream = null;
         video.srcObject = null;
-
         stopLocation();
 
         button.textContent = "Start Camera";
         detectButton.disabled = true;
-        resultBox.textContent = "";
-
+        resultBox.textContent = "Camera stopped.";
         return;
     }
 
-    button.textContent = "Opening camera...";
     button.disabled = true;
+    button.textContent = "Opening camera...";
 
     try {
         stream = await navigator.mediaDevices.getUserMedia({
-            video: {
-                facingMode: { ideal: "environment" }
-            },
+            video: { facingMode: { ideal: "environment" } },
             audio: false
         });
 
@@ -98,86 +80,68 @@ button.addEventListener("click", async () => {
 
         button.textContent = "Stop Camera";
         detectButton.disabled = false;
-
+        resultBox.textContent = "Camera ready. Tap Detect Disease.";
         startLocation();
     } catch (error) {
-        if (stream) {
-            stream.getTracks().forEach(track => track.stop());
-            stream = null;
-        }
-
+        stream = null;
         video.srcObject = null;
         button.textContent = "Start Camera";
-
-        alert("Could not start camera: " + error.message);
+        detectButton.disabled = true;
+        resultBox.textContent = "Camera error: " + error.message;
     } finally {
         button.disabled = false;
     }
 });
 
 detectButton.addEventListener("click", async () => {
+    resultBox.textContent = "Detect button clicked.";
+
     if (!stream || !video.videoWidth) {
-        resultBox.textContent =
-            "Please start the camera first.";
+        resultBox.textContent = "Please start the camera first.";
         return;
     }
 
     detectButton.disabled = true;
     detectButton.textContent = "Analyzing...";
-    resultBox.textContent =
-        "Sending image to the AI. Please wait...";
 
     try {
-        // Capture one frame from the live camera.
         const canvas = document.createElement("canvas");
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
-
-        const context = canvas.getContext("2d");
-        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        canvas.getContext("2d").drawImage(video, 0, 0);
 
         const blob = await new Promise((resolve, reject) => {
             canvas.toBlob(
-                imageBlob => {
-                    if (imageBlob) {
-                        resolve(imageBlob);
-                    } else {
-                        reject(new Error("Could not capture image."));
-                    }
-                },
+                file => file ? resolve(file) : reject(
+                    new Error("Could not capture camera image.")
+                ),
                 "image/jpeg",
-                0.90
+                0.9
             );
         });
 
-        const imageFile = new File(
-            [blob],
-            "lettuce.jpg",
-            { type: "image/jpeg" }
-        );
+        const imageFile = new File([blob], "lettuce.jpg", {
+            type: "image/jpeg"
+        });
 
-        // Send the captured image to the Gradio prediction API.
+        resultBox.textContent = "Connecting to AI...";
+
         const client = await getAIClient();
         const response = await client.predict("/predict", [imageFile]);
 
         const prediction = response.data?.[0];
-
-        resultBox.textContent =
-            typeof prediction === "string"
-                ? prediction
-                : JSON.stringify(prediction ?? response.data);
+        resultBox.textContent = typeof prediction === "string"
+            ? prediction
+            : JSON.stringify(prediction ?? response.data, null, 2);
 
     } catch (error) {
-        console.error("Disease detection failed:", error);
-
+        console.error(error);
         resultBox.textContent =
-            "Detection failed: " + (error.message || String(error)) +
-            "\nCheck that the Hugging Face Space is public and running.";
+            "Detection failed: " + (error.message || String(error));
     } finally {
         detectButton.disabled = !stream;
         detectButton.textContent = "Detect Disease";
     }
 });
 
-// Camera detection is unavailable until the camera starts.
 detectButton.disabled = true;
