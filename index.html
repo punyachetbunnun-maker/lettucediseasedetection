@@ -10,7 +10,7 @@
 <body>
   <h1>Lettuce Disease Detection</h1>
 
-  <button id="startCamera">Start Camera</button>
+  <button id="startCamera" type="button">Start Camera</button>
 
   <video id="video" autoplay playsinline muted></video>
 
@@ -18,12 +18,14 @@
   <p>Latitude: <span id="latitude">Waiting...</span></p>
   <p>Longitude: <span id="longitude">Waiting...</span></p>
   <p id="locationStatus">Location not started.</p>
-  <button id="detectDisease" onclick="alert('Detect button works!')">
-  Detect Disease
-</button>
-  <h2>Result</h2>
-  <div id="result"></div>
 
-  <script src="main.js?v=5"></script>
+  <button id="detectDisease" type="button" disabled>
+    Detect Disease
+  </button>
+
+  <h2>Result</h2>
+  <div id="result" role="status" aria-live="polite">No result yet.</div>
+
+  <script src="main.js?v=6"></script>
 </body>
 </html>
